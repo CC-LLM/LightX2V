@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from .files import router as files_router
-from .service_routes import router as service_router
+from .service_routes import get_model_info, router as service_router
 from .tasks import common_router, image_router, video_router
 
 
@@ -21,5 +21,8 @@ def create_api_router() -> APIRouter:
     api_router.include_router(tasks_router)
     api_router.include_router(files_router, prefix="/v1/files", tags=["files"])
     api_router.include_router(service_router, prefix="/v1/service", tags=["service"])
+    
+    # Register get_model_info at root level
+    api_router.get("/get_model_info", tags=["service"])(get_model_info)
 
     return api_router

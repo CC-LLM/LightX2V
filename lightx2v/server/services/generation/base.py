@@ -119,6 +119,9 @@ class BaseGenerationService(ABC):
             self._prepare_output_path(message.save_result_path, task_data)
             task_data["seed"] = message.seed
             task_data["resize_mode"] = message.resize_mode
+            
+            if hasattr(message, "aspect_ratio") and message.aspect_ratio:
+                task_data["aspect_ratio"] = message.aspect_ratio
 
             result = await self.inference_service.submit_task_async(task_data)
 

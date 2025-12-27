@@ -37,6 +37,8 @@ class BaseTaskRequest(BaseModel):
 class VideoTaskRequest(BaseTaskRequest):
     num_fragments: int = Field(1, description="Number of fragments")
     target_video_length: int = Field(81, description="Target video length")
+    resolution: Optional[str] = Field(None, description="Video resolution preset (e.g., '480p', '580p', '720p'). Overrides config if set.")
+    aspect_ratio: Optional[str] = Field(None, description="Video aspect ratio (e.g., '16:9', '9:16', '1:1'). If not set, auto-detected from input image.")
     audio_path: str = Field("", description="Input audio path (Wan-Audio)")
     video_duration: int = Field(5, description="Video duration (Wan-Audio)")
     talk_objects: Optional[list[TalkObject]] = Field(None, description="Talk objects (Wan-Audio)")

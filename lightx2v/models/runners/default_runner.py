@@ -20,29 +20,40 @@ from lightx2v.utils.utils import get_optimal_patched_size_with_sp, isotropic_cro
 from lightx2v_platform.base.global_var import AI_DEVICE
 
 
-def resize_image(img, resolution):
-    assert resolution in ["480p", "540p", "720p"]
+def resize_image(img, resolution, aspect_ratio):
+    assert resolution in ["480p", "540p", "580p", "720p"], f"Invalid resolution: {resolution}"
+    
+    # Aspect ratio mapping: bucket_key = height / width (input image ratio)
     bucket_config = {
-        0.667: np.array([[480, 832], [544, 960], [720, 1280]], dtype=np.int64),
-        1.500: np.array([[832, 480], [960, 544], [1280, 720]], dtype=np.int64),
-        1.000: np.array([[480, 480], [576, 576], [720, 720]], dtype=np.int64),
+        0.6667: np.array([[480, 848], [544, 960], [580, 1024], [720, 1280]], dtype=np.int64),  # 16:9 横屏
+        1.5000: np.array([[848, 480], [960, 544], [1024, 580], [1280, 720]], dtype=np.int64),  # 9:16 竖屏
+        1.0000: np.array([[480, 480], [576, 576], [580, 580], [720, 720]], dtype=np.int64),    # 1:1 方形
     }
+    
+    # Aspect ratio string to bucket key mapping
+    aspect_ratio_map = { "16:9": 0.6667, "9:16": 1.5000, "1:1": 1.0000 }
+    resolution_idx_map = { "480p": 0, "540p": 1, "580p": 2, "720p": 3 }
+    
     ori_height = img.shape[-2]
-    ori_weight = img.shape[-1]
-    ori_ratio = ori_height / ori_weight
-
-    aspect_ratios = np.array(np.array(list(bucket_config.keys())))
-    closet_aspect_idx = np.argmin(np.abs(aspect_ratios - ori_ratio))
-    closet_ratio = aspect_ratios[closet_aspect_idx]
-    if resolution == "480p":
-        target_h, target_w = bucket_config[closet_ratio][0]
-    elif resolution == "540p":
-        target_h, target_w = bucket_config[closet_ratio][1]
-    elif resolution == "720p":
-        target_h, target_w = bucket_config[closet_ratio][2]
+    ori_width = img.shape[-1]
+    
+    # Determine target aspect ratio
+    if aspect_ratio == "auto":
+        ori_ratio = ori_height / ori_width
+        aspect_ratios = np.array(list(bucket_config.keys()))
+        closet_aspect_idx = np.argmin(np.abs(aspect_ratios - ori_ratio))
+        target_ratio = aspect_ratios[closet_aspect_idx]
+        logger.info(f"Auto-detected aspect ratio: {target_ratio:.4f} from input {ori_height}x{ori_width}")
+    else:
+        target_ratio = aspect_ratio_map[aspect_ratio]
+        logger.info(f"Using specified aspect ratio: {aspect_ratio} (bucket key: {target_ratio:.4f})")
+    
+    # Select resolution from bucket
+    idx = resolution_idx_map[resolution]
+    target_h, target_w = bucket_config[target_ratio][idx]
 
     cropped_img = isotropic_crop_resize(img, (target_h, target_w))
-    logger.info(f"resize_image: {img.shape} -> {cropped_img.shape}, target_h: {target_h}, target_w: {target_w}")
+    logger.info(f"resize_image: {img.shape} -> {cropped_img.shape}, target: {target_h}x{target_w}")
     return cropped_img, target_h, target_w
 
 
@@ -244,8 +255,10 @@ class DefaultRunner(BaseRunner):
         self.input_info.original_size = img_ori.size
 
         if self.config.get("resize_mode", None) == "adaptive":
-            img, h, w = resize_image(img, self.config.get("resolution", "480p"))
-            logger.info(f"resize_image target_h: {h}, target_w: {w}")
+            resolution = self.config.get("resolution")
+            aspect_ratio = self.config.get("aspect_ratio")
+            logger.info(f"I2V adaptive mode: resize_image will use resolution '{resolution}' with aspect_ratio '{aspect_ratio}'")
+            img, h, w = resize_image(img, resolution, aspect_ratio)
             patched_h = h // self.config["vae_stride"][1] // self.config["patch_size"][1]
             patched_w = w // self.config["vae_stride"][2] // self.config["patch_size"][2]
 

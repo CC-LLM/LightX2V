@@ -17,8 +17,8 @@ def _write_file_sync(file_path: Path, content: bytes) -> None:
         buffer.write(content)
 
 
-@router.post("/", response_model=TaskResponse)
-async def create_video_task(message: VideoTaskRequest):
+# 核心处理函数
+async def _handle_video_task(message: VideoTaskRequest) -> TaskResponse:
     try:
         if hasattr(message, "image_path") and message.image_path and message.image_path.startswith("http"):
             if not await validate_url_async(message.image_path):
@@ -37,6 +37,14 @@ async def create_video_task(message: VideoTaskRequest):
     except Exception as e:
         logger.error(f"Failed to create video task: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# 同时支持带斜杠和不带斜杠两种方式
+@router.post("/", response_model=TaskResponse)
+@router.post("", response_model=TaskResponse)
+async def create_video_task(message: VideoTaskRequest):
+    """创建视频任务（支持 /video 和 /video/ 两种路径）"""
+    return await _handle_video_task(message)
 
 
 @router.post("/form", response_model=TaskResponse)

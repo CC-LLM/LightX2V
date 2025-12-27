@@ -76,6 +76,19 @@ class DistributedInferenceService:
         assert hasattr(self, "args"), "Distributed inference service has not been started. Call start_distributed_inference() first."
         return {"nproc_per_node": self.worker.world_size, "model_cls": self.args.model_cls, "model_path": self.args.model_path}
 
+    def get_model_info(self):
+        """Get model information including loading status."""
+        if not hasattr(self, "args") or self.args is None:
+            return {
+                "is_loaded": False,
+                "model_path": "",
+            }
+
+        return {
+            "is_loaded": self.is_running,
+            "model_path": self.args.model_path,
+        }
+
     async def run_worker_loop(self):
         if self.worker and self.worker.rank != 0:
             await self.worker.worker_loop()

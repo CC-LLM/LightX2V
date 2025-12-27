@@ -16,3 +16,11 @@ async def get_service_metadata():
     services = get_services()
     assert services.inference_service is not None, "Inference service is not initialized"
     return services.inference_service.server_metadata()
+
+
+# Exported to root level in router.py
+async def get_model_info():
+    """Get detailed model information including loading status."""
+    services = get_services()
+    assert services.inference_service is not None, "Inference service is not initialized"
+    return services.inference_service.get_model_info()
