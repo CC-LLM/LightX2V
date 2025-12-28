@@ -16,19 +16,20 @@ class TalkObject(BaseModel):
 
 
 class BaseTaskRequest(BaseModel):
+    # NOTE(wxy): 忽略客户端传入或者生成的 task_id，server 随机生成 UUID 作为 task_id
     task_id: str = Field(default_factory=generate_task_id, description="Task ID (auto-generated)")
     prompt: str = Field("", description="Generation prompt")
     use_prompt_enhancer: bool = Field(False, description="Whether to use prompt enhancer")
     negative_prompt: str = Field("", description="Negative prompt")
     image_path: str = Field("", description="Base64 encoded image or URL")
-    save_result_path: str = Field("", description="Save result path (optional, defaults to task_id, suffix auto-detected)")
+    save_result_path: str = Field("", description="Save result path (ignored, auto-generated from task_id)")
     infer_steps: int = Field(5, description="Inference steps")
     seed: int = Field(default_factory=generate_random_seed, description="Random seed (auto-generated if not set)")
 
     def __init__(self, **data):
         super().__init__(**data)
-        if not self.save_result_path:
-            self.save_result_path = f"{self.task_id}"
+        # NOTE(wxy): 忽略客户端提供的 save_result_path，强制使用 task_id 避免冲突
+        self.save_result_path = f"{self.task_id}"
 
     def get(self, key, default=None):
         return getattr(self, key, default)

@@ -20,6 +20,11 @@ class ServerConfig:
     cache_dir: str = str(Path(__file__).parent.parent / "server_cache")
     max_upload_size: int = 500 * 1024 * 1024  # 500MB
 
+    # 缓存清理配置
+    enable_cache_cleaner: bool = False  # 是否启用缓存清理
+    cache_retention_hours: float = 1.0  # 缓存文件保留时间（小时）
+    cache_check_interval: int = 300  # 检查间隔（秒）
+
     @classmethod
     def from_env(cls) -> "ServerConfig":
         config = cls()
@@ -43,6 +48,22 @@ class ServerConfig:
 
         if env_cache_dir := os.environ.get("LIGHTX2V_CACHE_DIR"):
             config.cache_dir = env_cache_dir
+
+        # 缓存清理配置
+        if env_enable_cleaner := os.environ.get("LIGHTX2V_ENABLE_CACHE_CLEANER"):
+            config.enable_cache_cleaner = env_enable_cleaner.lower() in ("true", "1", "yes")
+
+        if env_retention := os.environ.get("LIGHTX2V_CACHE_RETENTION_HOURS"):
+            try:
+                config.cache_retention_hours = float(env_retention)
+            except ValueError:
+                logger.warning(f"Invalid cache retention hours: {env_retention}")
+
+        if env_interval := os.environ.get("LIGHTX2V_CACHE_CHECK_INTERVAL"):
+            try:
+                config.cache_check_interval = int(env_interval)
+            except ValueError:
+                logger.warning(f"Invalid cache check interval: {env_interval}")
 
         return config
 

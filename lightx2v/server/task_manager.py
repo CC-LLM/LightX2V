@@ -53,8 +53,12 @@ class TaskManager:
             if active_tasks >= self.max_queue_size:
                 raise RuntimeError(f"Task queue is full (max {self.max_queue_size} tasks)")
 
-            task_id = getattr(message, "task_id", str(uuid.uuid4()))
-            task_info = TaskInfo(task_id=task_id, status=TaskStatus.PENDING, message=message, save_result_path=getattr(message, "save_result_path", None))
+            # NOTE(wxy): 忽略客户端传入或生成的 task_id，使用随机生成的 UUID
+            # 同时更新 message 的 task_id 和 save_result_path，避免文件名冲突
+            task_id = str(uuid.uuid4())
+            message.task_id = task_id
+            message.save_result_path = task_id
+            task_info = TaskInfo(task_id=task_id, status=TaskStatus.PENDING, message=message, save_result_path=task_id)
 
             self._tasks[task_id] = task_info
             self.total_tasks += 1

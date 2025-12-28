@@ -107,9 +107,21 @@ class ApiServer:
             if lock_acquired:
                 task_manager.release_processing_lock(task_id)
 
-    def initialize_services(self, cache_dir: Path, inference_service: DistributedInferenceService):
+    def initialize_services(
+        self,
+        cache_dir: Path,
+        inference_service: DistributedInferenceService,
+        enable_cache_cleaner: bool = True,
+        cache_cleaner_config: Optional[dict] = None,
+    ):
         container = ServiceContainer.get_instance()
-        container.initialize(cache_dir, inference_service, self.max_queue_size)
+        container.initialize(
+            cache_dir,
+            inference_service,
+            self.max_queue_size,
+            enable_cache_cleaner=enable_cache_cleaner,
+            cache_cleaner_config=cache_cleaner_config,
+        )
         self._ensure_processing_thread_running()
 
     async def cleanup(self):
@@ -118,6 +130,11 @@ class ApiServer:
             self.processing_thread.join(timeout=5)
 
         services = get_services()
+        
+        # 停止缓存清理器（在独立线程中运行，同步停止）
+        if services.cache_cleaner:
+            services.cache_cleaner.stop()
+
         if services.file_service:
             await services.file_service.cleanup()
 

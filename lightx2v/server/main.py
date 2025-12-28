@@ -53,7 +53,19 @@ def run_server(args):
             cache_dir.mkdir(parents=True, exist_ok=True)
 
             api_server = ApiServer(max_queue_size=server_config.max_queue_size)
-            api_server.initialize_services(cache_dir, inference_service)
+            
+            # 配置缓存清理器
+            cache_cleaner_config = {
+                "retention_hours": server_config.cache_retention_hours,
+                "check_interval": server_config.cache_check_interval,
+            }
+            
+            api_server.initialize_services(
+                cache_dir,
+                inference_service,
+                enable_cache_cleaner=server_config.enable_cache_cleaner,
+                cache_cleaner_config=cache_cleaner_config,
+            )
 
             app = api_server.get_app()
 
