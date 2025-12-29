@@ -69,6 +69,7 @@ class TaskResponse(BaseModel):
     task_id: str
     task_status: str
     save_result_path: str
+    final_config: Optional[dict] = Field(None, description="Final video configuration (height, width, fps, target_video_length)")
 
 
 class StopTaskResponse(BaseModel):

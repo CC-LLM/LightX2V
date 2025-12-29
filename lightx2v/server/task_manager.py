@@ -26,6 +26,7 @@ class TaskInfo:
     end_time: Optional[datetime] = None
     error: Optional[str] = None
     save_result_path: Optional[str] = None
+    final_config: Optional[Dict[str, Any]] = None
     stop_event: threading.Event = field(default_factory=threading.Event)
     thread: Optional[threading.Thread] = None
 
@@ -80,7 +81,7 @@ class TaskManager:
 
             return task
 
-    def complete_task(self, task_id: str, save_result_path: Optional[str] = None):
+    def complete_task(self, task_id: str, save_result_path: Optional[str] = None, final_config: Optional[Dict[str, Any]] = None):
         with self._lock:
             if task_id not in self._tasks:
                 logger.warning(f"Task {task_id} not found for completion")
@@ -91,6 +92,8 @@ class TaskManager:
             task.end_time = datetime.now()
             if save_result_path:
                 task.save_result_path = save_result_path
+            if final_config:
+                task.final_config = final_config
 
             self.completed_tasks += 1
 
@@ -142,7 +145,17 @@ class TaskManager:
         if not task:
             return None
 
-        return {"task_id": task.task_id, "status": task.status.value, "start_time": task.start_time, "end_time": task.end_time, "error": task.error, "save_result_path": task.save_result_path}
+        status_dict = {
+            "task_id": task.task_id,
+            "status": task.status.value,
+            "start_time": task.start_time,
+            "end_time": task.end_time,
+            "error": task.error,
+            "save_result_path": task.save_result_path,
+        }
+        if task.final_config:
+            status_dict["final_config"] = task.final_config
+        return status_dict
 
     def get_all_tasks(self):
         with self._lock:

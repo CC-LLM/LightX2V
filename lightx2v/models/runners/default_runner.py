@@ -259,6 +259,9 @@ class DefaultRunner(BaseRunner):
             aspect_ratio = self.config.get("aspect_ratio")
             logger.info(f"I2V adaptive mode: resize_image will use resolution '{resolution}' with aspect_ratio '{aspect_ratio}'")
             img, h, w = resize_image(img, resolution, aspect_ratio)
+            # NOTE(wxy): 需要更新 config 中的 target_height 和 target_width，用于信息回传
+            with self.config.temporarily_unlocked():
+                self.config["target_height"], self.config["target_width"] = h, w
             patched_h = h // self.config["vae_stride"][1] // self.config["patch_size"][1]
             patched_w = w // self.config["vae_stride"][2] // self.config["patch_size"][2]
 
@@ -453,7 +456,11 @@ class DefaultRunner(BaseRunner):
             if "video_frame_interpolation" in self.config and self.config["video_frame_interpolation"].get("target_fps"):
                 fps = self.config["video_frame_interpolation"]["target_fps"]
             else:
-                fps = self.config.get("fps", 16)
+                # NOTE(wxy): 支持客户端自定义 target_fps 
+                fps = self.config.get("target_fps", 16)
+                with self.config.temporarily_unlocked():
+                    self.config["target_fps"] = fps
+                logger.info(f"Using target_fps: {fps}")
 
             if not dist.is_initialized() or dist.get_rank() == 0:
                 logger.info(f"🎬 Start to save video 🎬")

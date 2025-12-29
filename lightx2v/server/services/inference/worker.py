@@ -81,13 +81,36 @@ class TorchrunInferenceWorker:
             task_data["return_result_tensor"] = False
             task_data["negative_prompt"] = task_data.get("negative_prompt", "")
 
-            target_fps = task_data.pop("target_fps", None)
+            # NOTE(wxy): 测试!
+            target_fps = task_data.get("target_fps", None)
             if target_fps is not None:
                 vfi_cfg = self.runner.config.get("video_frame_interpolation")
                 if vfi_cfg:
                     task_data["video_frame_interpolation"] = {**vfi_cfg, "target_fps": target_fps}
                 else:
                     logger.warning(f"Target FPS {target_fps} is set, but video frame interpolation is not configured")
+
+            # Handle target_video_length parameter
+            target_video_length = task_data.get("target_video_length", None)
+            if target_video_length is not None:
+                # if hasattr(self.runner, 'scheduler') and hasattr(self.runner.scheduler, 'target_video_length'):
+                #     self.runner.scheduler.target_video_length = target_video_length
+                #     logger.info(f"Updated scheduler.target_video_length to {target_video_length}")
+                if task_data["task"] in ["i2v", "s2v"]:
+                    vae_stride = self.runner.config.get("vae_stride")
+                    model_cls = self.runner.config.get("model_cls")
+                    if target_video_length % vae_stride[0] != 1:
+                        target_video_length = target_video_length // vae_stride[0] * vae_stride[0] + 1
+                        task_data["target_video_length"] = target_video_length
+                        logger.warning(f"`num_frames - 1` has to be divisible by {vae_stride[0]}. Rounding to the nearest number {target_video_length}.")
+                
+                if task_data["task"] not in ["t2i", "i2i"] and model_cls not in ["hunyuan_video_1.5", "hunyuan_video_1.5_distill"]:
+                    task_data["attnmap_frame_num"] = ((target_video_length - 1) // vae_stride[0] + 1) // self.runner.config.get("patch_size")[0]
+                    if model_cls == "seko_talk":
+                        task_data["attnmap_frame_num"] += 1
+                    logger.info(f"Updated attnmap_frame_num to {task_data['attnmap_frame_num']}")
+                
+                logger.info(f"Updating target_video_length from {self.runner.config.get('target_video_length')} to {target_video_length}.")                    
 
             resolution = self.runner.config.get("resolution", "480p")
             resolution = task_data.get("resolution", resolution)
@@ -117,12 +140,24 @@ class TorchrunInferenceWorker:
 
             self.runner.set_config(task_data)
             self.runner.run_pipeline(input_info)
-
+            
+            # Collect final config after inference (convert numpy types to Python native types)
+            final_config = {
+                "target_video_length": int(self.runner.config.get("target_video_length")),
+                "target_height": int(self.runner.config.get("target_height")),
+                "target_width": int(self.runner.config.get("target_width")),
+            }
+            if "video_frame_interpolation" in self.runner.config and self.runner.config["video_frame_interpolation"].get("target_fps"):
+                final_config["target_fps"] = int(self.runner.config["video_frame_interpolation"]["target_fps"])
+            else:
+                final_config["target_fps"] = int(self.runner.config.get("target_fps", 16))
+            
             await asyncio.sleep(0)
 
         except Exception as e:
             has_error = True
             error_msg = str(e)
+            final_config = {}
             logger.exception(f"Rank {self.rank} inference failed: {error_msg}")
 
         if self.world_size > 1:
@@ -142,6 +177,7 @@ class TorchrunInferenceWorker:
                     "status": "success",
                     "save_result_path": task_data.get("video_path", task_data["save_result_path"]),
                     "message": "Inference completed",
+                    "final_config": final_config,
                 }
         else:
             return None

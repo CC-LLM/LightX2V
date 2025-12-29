@@ -90,7 +90,8 @@ class ApiServer:
             result = await generation_service.generate_with_stop_event(message, task_info.stop_event)
 
             if result:
-                task_manager.complete_task(task_id, result.save_result_path)
+                final_config = result.final_config if hasattr(result, "final_config") else None
+                task_manager.complete_task(task_id, result.save_result_path, final_config)
                 logger.info(f"Task {task_id} completed successfully")
             else:
                 if task_info.stop_event.is_set():

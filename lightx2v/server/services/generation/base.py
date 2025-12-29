@@ -139,6 +139,7 @@ class BaseGenerationService(ABC):
                     task_id=message.task_id,
                     task_status="completed",
                     save_result_path=actual_save_path.name,
+                    final_config=result.get("final_config"),
                 )
             else:
                 error_msg = result.get("error", "Inference failed")
