@@ -457,9 +457,7 @@ class DefaultRunner(BaseRunner):
                 fps = self.config["video_frame_interpolation"]["target_fps"]
             else:
                 # NOTE(wxy): 支持客户端自定义 target_fps 
-                fps = self.config.get("target_fps", 16)
-                with self.config.temporarily_unlocked():
-                    self.config["target_fps"] = fps
+                fps = self.config.get("target_fps")
                 logger.info(f"Using target_fps: {fps}")
 
             if not dist.is_initialized() or dist.get_rank() == 0:

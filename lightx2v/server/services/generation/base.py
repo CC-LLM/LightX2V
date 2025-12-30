@@ -98,6 +98,7 @@ class BaseGenerationService(ABC):
 
     async def generate_with_stop_event(self, message: Any, stop_event) -> Optional[Any]:
         try:
+            logger.info(f"Generating task {message.task_id} with message: {message}")
             task_data = {field: getattr(message, field) for field in message.model_fields_set if field != "task_id"}
             task_data["task_id"] = message.task_id
 

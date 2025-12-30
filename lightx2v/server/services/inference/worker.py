@@ -81,53 +81,64 @@ class TorchrunInferenceWorker:
             task_data["return_result_tensor"] = False
             task_data["negative_prompt"] = task_data.get("negative_prompt", "")
 
-            # NOTE(wxy): 测试!
-            target_fps = task_data.get("target_fps", None)
-            if target_fps is not None:
-                vfi_cfg = self.runner.config.get("video_frame_interpolation")
-                if vfi_cfg:
-                    task_data["video_frame_interpolation"] = {**vfi_cfg, "target_fps": target_fps}
-                else:
-                    logger.warning(f"Target FPS {target_fps} is set, but video frame interpolation is not configured")
+            # NOTE(wxy): 处理客户端自定义字段
+            # 1. [target_fps]: VideoTaskRequest 默认值为 16
+            # 覆盖顺序: 客户端 > runner > 默认值 16
+            runner_target_fps = self.runner.config.get("target_fps")
+            target_fps = runner_target_fps if runner_target_fps is not None else 16
+            target_fps = task_data.get("target_fps", target_fps)
+            vfi_cfg = self.runner.config.get("video_frame_interpolation")
+            if vfi_cfg:
+                task_data["video_frame_interpolation"] = {**vfi_cfg, "target_fps": target_fps}
+            else:
+                task_data["target_fps"] = target_fps
+                logger.warning(f"Target FPS {target_fps} is set, but video frame interpolation is not configured")
+            logger.info(f"Runner config target_fps: {runner_target_fps} -> Client request target_fps: {target_fps}.")                    
 
-            # Handle target_video_length parameter
-            target_video_length = task_data.get("target_video_length", None)
-            if target_video_length is not None:
-                # if hasattr(self.runner, 'scheduler') and hasattr(self.runner.scheduler, 'target_video_length'):
-                #     self.runner.scheduler.target_video_length = target_video_length
-                #     logger.info(f"Updated scheduler.target_video_length to {target_video_length}")
-                if task_data["task"] in ["i2v", "s2v"]:
-                    vae_stride = self.runner.config.get("vae_stride")
-                    model_cls = self.runner.config.get("model_cls")
-                    if target_video_length % vae_stride[0] != 1:
-                        target_video_length = target_video_length // vae_stride[0] * vae_stride[0] + 1
-                        task_data["target_video_length"] = target_video_length
-                        logger.warning(f"`num_frames - 1` has to be divisible by {vae_stride[0]}. Rounding to the nearest number {target_video_length}.")
-                
-                if task_data["task"] not in ["t2i", "i2i"] and model_cls not in ["hunyuan_video_1.5", "hunyuan_video_1.5_distill"]:
-                    task_data["attnmap_frame_num"] = ((target_video_length - 1) // vae_stride[0] + 1) // self.runner.config.get("patch_size")[0]
-                    if model_cls == "seko_talk":
-                        task_data["attnmap_frame_num"] += 1
-                    logger.info(f"Updated attnmap_frame_num to {task_data['attnmap_frame_num']}")
-                
-                logger.info(f"Updating target_video_length from {self.runner.config.get('target_video_length')} to {target_video_length}.")                    
-
-            resolution = self.runner.config.get("resolution", "480p")
-            resolution = task_data.get("resolution", resolution)
-            # default aspect ratio: i2v is auto, other is 16:9
-            default_aspect_ratio = "auto" if task_data["task"] == "i2v" else "16:9"
-            aspect_ratio = self.runner.config.get("aspect_ratio", default_aspect_ratio)
-            aspect_ratio = task_data.get("aspect_ratio", aspect_ratio)
-            self._validate_resolution_and_aspect_ratio(resolution, aspect_ratio, task_data["task"])
+            # 2. [target_video_length]: VideoTaskRequest 默认值为 81
+            # 覆盖顺序: 客户端 > runner > 默认值 81
+            runner_target_video_length = self.runner.config.get("target_video_length")
+            target_video_length = runner_target_video_length if runner_target_video_length is not None else 81
+            target_video_length = task_data.get("target_video_length", target_video_length)
+            # self.runner.scheduler.target_video_length = target_video_length
+            vae_stride = self.runner.config.get("vae_stride")
+            model_cls = self.runner.config.get("model_cls")
+            if task_data["task"] in ["i2v", "s2v"]:
+                if target_video_length % vae_stride[0] != 1:
+                    target_video_length = target_video_length // vae_stride[0] * vae_stride[0] + 1
+                    logger.warning(f"`num_frames - 1` has to be divisible by {vae_stride[0]}. Rounding to the nearest number {target_video_length}.")
             
+            if task_data["task"] not in ["t2i", "i2i"] and model_cls not in ["hunyuan_video_1.5", "hunyuan_video_1.5_distill"]:
+                task_data["attnmap_frame_num"] = ((target_video_length - 1) // vae_stride[0] + 1) // self.runner.config.get("patch_size")[0]
+                if model_cls == "seko_talk":
+                    task_data["attnmap_frame_num"] += 1
+                logger.info(f"Updated attnmap_frame_num to {task_data['attnmap_frame_num']}")
+            
+            task_data["target_video_length"] = target_video_length
+            logger.info(f"Runner config target_video_length: {runner_target_video_length} -> Client requesttarget_video_length: {target_video_length}.")                    
+
+            # 3. [resolution]: 默认值为 480p, [aspect_ratio]: 默认值为 auto (i2v) 或 16:9 (其他)
+            # 覆盖顺序: 客户端 > runner > 默认值
+            default_aspect_ratio = "auto" if task_data["task"] == "i2v" else "16:9"
+            runner_resolution = self.runner.config.get("resolution")
+            runner_aspect_ratio = self.runner.config.get("aspect_ratio")
+            logger.info(f"Runner config: resolution: {runner_resolution}, aspect_ratio: {runner_aspect_ratio}")
+            resolution = runner_resolution if runner_resolution is not None else "480p"
+            aspect_ratio = runner_aspect_ratio if runner_aspect_ratio is not None else default_aspect_ratio
+            resolution = task_data.get("resolution", resolution)
+            aspect_ratio = task_data.get("aspect_ratio", aspect_ratio)         
             task_data["resolution"] = resolution
             task_data["aspect_ratio"] = aspect_ratio
+            self._validate_resolution_and_aspect_ratio(resolution, aspect_ratio, task_data["task"])
+            logger.info(f"{task_data['task']} task: resolution: {resolution}, aspect_ratio: {aspect_ratio}")
 
+            # 4. [resize_mode]: i2v 均设为 adaptive
             if task_data["task"] == "i2v":
                 task_data["resize_mode"] = "adaptive"
 
+            # 5. 非 auto 时，计算 target_height 和 target_width; auto 时将在 resize_image 中计算
             if aspect_ratio == "auto":
-                logger.info(f"{task_data['task']} task: resolution '{resolution}' with aspect_ratio 'auto'")
+                logger.info(f"{task_data['task']} task: aspect_ratio is auto, will be calculated in resize_image")
             else:
                 resolution_values = parse_resolution(resolution, aspect_ratio)
                 height, width = resolution_values
@@ -138,20 +149,25 @@ class TorchrunInferenceWorker:
             task_data = EasyDict(task_data)
             input_info = set_input_info(task_data)
 
-            self.runner.set_config(task_data)
+            self.runner.set_config(task_data)  # 更新全局 runner config
             self.runner.run_pipeline(input_info)
+
+            # 由于 runner config 被更新, 重置 resolution/aspect_ratio/target_video_length 为 runner config 中的值
+            with self.runner.config.temporarily_unlocked():
+                self.runner.config["resolution"] = runner_resolution
+                self.runner.config["aspect_ratio"] = runner_aspect_ratio
+                self.runner.config["target_video_length"] = runner_target_video_length
+                self.runner.config["target_fps"] = runner_target_fps
+                logger.info(f"Reset resolution and aspect_ratio to runner config: {self.runner.config['resolution']} and {self.runner.config['aspect_ratio']}")
             
             # Collect final config after inference (convert numpy types to Python native types)
             final_config = {
-                "target_video_length": int(self.runner.config.get("target_video_length")),
+                "target_video_length": task_data["target_video_length"],
+                "target_fps": task_data["target_fps"],
+                # 每个请求推理时下面两个值都会被重新计算并设置到 runner config 中
                 "target_height": int(self.runner.config.get("target_height")),
                 "target_width": int(self.runner.config.get("target_width")),
             }
-            if "video_frame_interpolation" in self.runner.config and self.runner.config["video_frame_interpolation"].get("target_fps"):
-                final_config["target_fps"] = int(self.runner.config["video_frame_interpolation"]["target_fps"])
-            else:
-                final_config["target_fps"] = int(self.runner.config.get("target_fps", 16))
-            
             await asyncio.sleep(0)
 
         except Exception as e:
