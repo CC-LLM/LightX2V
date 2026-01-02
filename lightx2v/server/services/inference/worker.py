@@ -82,6 +82,11 @@ class TorchrunInferenceWorker:
             task_data["negative_prompt"] = task_data.get("negative_prompt", "")
 
             # NOTE(wxy): 处理客户端自定义字段
+            if self.runner.scheduler.__class__.__name__ == "WanStepDistillScheduler":
+                task_data.pop("infer_steps", None)
+                logger.info(f"Using WanStepDistillScheduler, pop infer_steps from client request")
+            
+            # NOTE(wxy): 处理 runner 中的配置
             # 1. [target_fps]: VideoTaskRequest 默认值为 16
             # 覆盖顺序: 客户端 > runner > 默认值 16
             runner_target_fps = self.runner.config.get("target_fps")
@@ -118,7 +123,7 @@ class TorchrunInferenceWorker:
             logger.info(f"Runner config target_video_length: {runner_target_video_length} -> Client requesttarget_video_length: {target_video_length}.")                    
 
             # 3. [resolution]: 默认值为 480p, [aspect_ratio]: 默认值为 auto (i2v) 或 16:9 (其他)
-            # 覆盖顺序: 客户端 > runner > 默认值
+            # 覆盖顺序: 客户端 > runner > 默认值, 如果客户端传入 "default", 则使用 runner 中的值
             default_aspect_ratio = "auto" if task_data["task"] == "i2v" else "16:9"
             runner_resolution = self.runner.config.get("resolution")
             runner_aspect_ratio = self.runner.config.get("aspect_ratio")
@@ -126,7 +131,11 @@ class TorchrunInferenceWorker:
             resolution = runner_resolution if runner_resolution is not None else "480p"
             aspect_ratio = runner_aspect_ratio if runner_aspect_ratio is not None else default_aspect_ratio
             resolution = task_data.get("resolution", resolution)
-            aspect_ratio = task_data.get("aspect_ratio", aspect_ratio)         
+            if resolution == "default":
+                resolution = runner_resolution
+            aspect_ratio = task_data.get("aspect_ratio", aspect_ratio)
+            if aspect_ratio == "default":
+                aspect_ratio = runner_aspect_ratio
             task_data["resolution"] = resolution
             task_data["aspect_ratio"] = aspect_ratio
             self._validate_resolution_and_aspect_ratio(resolution, aspect_ratio, task_data["task"])
