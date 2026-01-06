@@ -26,7 +26,7 @@ class WanScheduler(BaseScheduler):
         self.disable_corrector = []
         self.solver_order = 2
         self.noise_pred = None
-        self.sample_guide_scale = self.config["sample_guide_scale"]
+        self.sample_guide_scale = self.config.get("sample_guide_scale", None)
         self.caching_records_2 = [True] * self.config["infer_steps"]
         self.head_size = self.config["dim"] // self.config["num_heads"]
         self.freqs = torch.cat(

@@ -82,9 +82,10 @@ class TorchrunInferenceWorker:
             task_data["negative_prompt"] = task_data.get("negative_prompt", "")
 
             # NOTE(wxy): 处理客户端自定义字段
-            if self.runner.scheduler.__class__.__name__ == "WanStepDistillScheduler":
+            logger.info(f"Runner scheduler: {self.runner.scheduler.__class__.__name__}")
+            if self.runner.scheduler.__class__.__name__ == "Wan22StepDistillScheduler":
                 task_data.pop("infer_steps", None)
-                logger.info(f"Using WanStepDistillScheduler, pop infer_steps from client request")
+                logger.info(f"Using Wan22StepDistillScheduler, pop infer_steps from client request")
             
             # NOTE(wxy): 处理 runner 中的配置
             # 1. [target_fps]: VideoTaskRequest 默认值为 16

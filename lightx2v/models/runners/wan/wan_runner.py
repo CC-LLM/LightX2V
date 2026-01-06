@@ -359,7 +359,14 @@ class WanRunner(DefaultRunner):
         else:
             latent_shape = self.input_info.latent_shape
             latent_h, latent_w = self.input_info.latent_shape[-2], self.input_info.latent_shape[-1]
-            world_size_h, world_size_w = None, None
+            # Adjust latent dimensions for optimal 2D grid splitting when using distributed processing
+            if dist.is_initialized() and dist.get_world_size() > 1:
+                latent_h, latent_w, world_size_h, world_size_w = self._adjust_latent_for_grid_splitting(latent_h, latent_w, dist.get_world_size())
+                logger.info(f"adaptive mode: adjust_latent: {latent_h}x{latent_w}, grid: {world_size_h}x{world_size_w}")
+                # Update latent_shape after adjustment
+                latent_shape = self.get_latent_shape_with_lat_hw(latent_h, latent_w)
+            else:
+                world_size_h, world_size_w = None, None
 
         if self.config.get("changing_resolution", False):
             assert last_frame is None
@@ -432,6 +439,29 @@ class WanRunner(DefaultRunner):
             del self.vae_encoder
             torch.cuda.empty_cache()
             gc.collect()
+        
+        # # Ensure vae_encoder_out dimensions match mask dimensions
+        # # VAE encoder output shape: [C, T, H, W] or [C, T, latent_h, latent_w]
+        # # Mask shape: [4, T, latent_h, latent_w] after transpose
+        # if vae_encoder_out.shape[-2:] != (lat_h, lat_w):
+        #     actual_lat_h, actual_lat_w = vae_encoder_out.shape[-2:]
+        #     logger.warning(f"VAE encoder output size {actual_lat_h}x{actual_lat_w} doesn't match expected {lat_h}x{lat_w}, adjusting mask")
+        #     # Adjust mask to match actual VAE encoder output size
+        #     msk = torch.ones(
+        #         1,
+        #         self.config["target_video_length"],
+        #         actual_lat_h,
+        #         actual_lat_w,
+        #         device=torch.device(AI_DEVICE),
+        #     )
+        #     if last_frame is not None:
+        #         msk[:, 1:-1] = 0
+        #     else:
+        #         msk[:, 1:] = 0
+        #     msk = torch.concat([torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]], dim=1)
+        #     msk = msk.view(1, msk.shape[1] // 4, 4, actual_lat_h, actual_lat_w)
+        #     msk = msk.transpose(1, 2)[0]
+        
         vae_encoder_out = torch.concat([msk, vae_encoder_out]).to(GET_DTYPE())
         return vae_encoder_out
 

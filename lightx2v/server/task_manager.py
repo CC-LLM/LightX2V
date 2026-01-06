@@ -2,7 +2,7 @@ import threading
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -22,7 +22,7 @@ class TaskInfo:
     task_id: str
     status: TaskStatus
     message: Any
-    start_time: datetime = field(default_factory=datetime.now)
+    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     end_time: Optional[datetime] = None
     error: Optional[str] = None
     save_result_path: Optional[str] = None
@@ -75,7 +75,7 @@ class TaskManager:
 
             task = self._tasks[task_id]
             task.status = TaskStatus.PROCESSING
-            task.start_time = datetime.now()
+            task.start_time = datetime.now(timezone.utc).isoformat()
 
             self._tasks.move_to_end(task_id)
 
@@ -89,7 +89,7 @@ class TaskManager:
 
             task = self._tasks[task_id]
             task.status = TaskStatus.COMPLETED
-            task.end_time = datetime.now()
+            task.end_time = datetime.now(timezone.utc).isoformat()
             if save_result_path:
                 task.save_result_path = save_result_path
             if final_config:
@@ -105,7 +105,7 @@ class TaskManager:
 
             task = self._tasks[task_id]
             task.status = TaskStatus.FAILED
-            task.end_time = datetime.now()
+            task.end_time = datetime.now(timezone.utc).isoformat()
             task.error = error
 
             self.failed_tasks += 1
@@ -122,7 +122,7 @@ class TaskManager:
 
             task.stop_event.set()
             task.status = TaskStatus.CANCELLED
-            task.end_time = datetime.now()
+            task.end_time = datetime.now(timezone.utc).isoformat()
             task.error = "Task cancelled by user"
 
             if task.thread and task.thread.is_alive():
