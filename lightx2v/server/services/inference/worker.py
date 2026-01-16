@@ -151,7 +151,7 @@ class TorchrunInferenceWorker:
                 logger.info(f"{task_data['task']} task: aspect_ratio is auto, will be calculated in resize_image")
             else:
                 resolution_values = parse_resolution(resolution, aspect_ratio)
-                height, width = resolution_values
+                width, height = resolution_values
                 task_data["target_height"] = height
                 task_data["target_width"] = width
                 logger.info(f"{task_data['task']} task: resolution '{resolution}' with aspect_ratio '{aspect_ratio}' mapped to {height}x{width}")

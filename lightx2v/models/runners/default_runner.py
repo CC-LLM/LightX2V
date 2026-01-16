@@ -19,42 +19,45 @@ from lightx2v.utils.profiler import *
 from lightx2v.utils.utils import get_optimal_patched_size_with_sp, isotropic_crop_resize, save_to_video, vae_to_comfyui_image
 from lightx2v_platform.base.global_var import AI_DEVICE
 
+RESOLUTION_PRESETS = {
+    "16:9": {
+        "480p": (832, 480),
+        "580p": (960, 512),
+        "720p": (1280, 720),
+    },
+    "9:16": {
+        "480p": (480, 832),
+        "580p": (512, 960),
+        "720p": (720, 1280),
+    },
+    "1:1": {
+        "480p": (480, 480),
+        "580p": (512, 512),
+        "720p": (720, 720),
+    },
+}
+
+ASPECT_RATIO_MAP = {16 / 9: "16:9", 9 / 16: "9:16", 1.0: "1:1"}
+
 
 def resize_image(img, resolution, aspect_ratio):
-    assert resolution in ["480p", "540p", "580p", "720p"], f"Invalid resolution: {resolution}"
-    
-    # Aspect ratio mapping: bucket_key = height / width (input image ratio)
-    bucket_config = {
-        0.6667: np.array([[480, 848], [544, 960], [580, 1024], [720, 1280]], dtype=np.int64),  # 16:9 横屏
-        1.5000: np.array([[848, 480], [960, 544], [1024, 580], [1280, 720]], dtype=np.int64),  # 9:16 竖屏
-        1.0000: np.array([[480, 480], [576, 576], [580, 580], [720, 720]], dtype=np.int64),    # 1:1 方形
-    }
-    
-    # Aspect ratio string to bucket key mapping
-    aspect_ratio_map = { "16:9": 0.6667, "9:16": 1.5000, "1:1": 1.0000 }
-    resolution_idx_map = { "480p": 0, "540p": 1, "580p": 2, "720p": 3 }
-    
-    ori_height = img.shape[-2]
-    ori_width = img.shape[-1]
-    
-    # Determine target aspect ratio
-    if aspect_ratio == "auto":
-        ori_ratio = ori_height / ori_width
-        aspect_ratios = np.array(list(bucket_config.keys()))
-        closet_aspect_idx = np.argmin(np.abs(aspect_ratios - ori_ratio))
-        target_ratio = aspect_ratios[closet_aspect_idx]
-        logger.info(f"Auto-detected aspect ratio: {target_ratio:.4f} from input {ori_height}x{ori_width}")
-    else:
-        target_ratio = aspect_ratio_map[aspect_ratio]
-        logger.info(f"Using specified aspect ratio: {aspect_ratio} (bucket key: {target_ratio:.4f})")
-    
-    # Select resolution from bucket
-    idx = resolution_idx_map[resolution]
-    target_h, target_w = bucket_config[target_ratio][idx]
+    ori_height, ori_width = img.shape[-2], img.shape[-1]
+    ori_ratio = ori_width / ori_height
 
+    if aspect_ratio == "auto":
+        closest_aspect_ratio = min(
+            ASPECT_RATIO_MAP.keys(), key=lambda x: abs(x - ori_ratio)
+        )
+        aspect_ratio = ASPECT_RATIO_MAP[closest_aspect_ratio]
+        logger.info(f"Auto-detected aspect ratio: {aspect_ratio} from input {ori_height}x{ori_width}")
+    
+    assert aspect_ratio in RESOLUTION_PRESETS, f"Invalid aspect ratio: {aspect_ratio}"
+    assert resolution in RESOLUTION_PRESETS[aspect_ratio], f"Invalid resolution: {resolution}"
+
+    target_w, target_h = RESOLUTION_PRESETS[aspect_ratio][resolution]
     cropped_img = isotropic_crop_resize(img, (target_h, target_w))
-    logger.info(f"resize_image: {img.shape} -> {cropped_img.shape}, target: {target_h}x{target_w}")
-    return cropped_img, target_h, target_w
+    logger.info(f"resize_image: {img.shape} -> {cropped_img.shape}, target: {target_w}x{target_h}")
+    return cropped_img, target_w, target_h
 
 
 class DefaultRunner(BaseRunner):
@@ -258,7 +261,7 @@ class DefaultRunner(BaseRunner):
             resolution = self.config.get("resolution")
             aspect_ratio = self.config.get("aspect_ratio")
             logger.info(f"I2V adaptive mode: resize_image will use resolution '{resolution}' with aspect_ratio '{aspect_ratio}'")
-            img, h, w = resize_image(img, resolution, aspect_ratio)
+            img, w, h = resize_image(img, resolution, aspect_ratio)
             # NOTE(wxy): 需要更新 config 中的 target_height 和 target_width，用于信息回传
             with self.config.temporarily_unlocked():
                 self.config["target_height"], self.config["target_width"] = h, w
